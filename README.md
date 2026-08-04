@@ -4,4 +4,4 @@ QuickPic-Gallery-Rhythm-Playback-Version（快图浏览音乐节奏卡点播放�
  用来看涩图就很棒
  奈何个人能力有限（token不够）
  所以放出来看看有没有大佬拿去完善一下
- 
+ 原版本是@WSTxda在维护 最新的也是去年的
