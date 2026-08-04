@@ -1,2 +1,4 @@
-# QP-Gallery-RPV
-QuickPic-Gallery-Rhythm-Playback-Version
+ 本质上我是想做一个随着音乐节奏卡点播放图片的版本
+ 奈何个人能力有限（token不够）
+ 所以放出来看看有没有大佬拿去完善一下
+ 
