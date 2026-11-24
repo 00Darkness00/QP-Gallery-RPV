@@ -1,0 +1,817 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+<meta name="theme-color" content="#09090f" />
+<title>节拍画册 BeatSync Gallery</title>
+<style>
+  :root {
+    --bg: #09090f;
+    --glass: rgba(16, 16, 28, 0.72);
+    --glass-strong: rgba(14, 14, 24, 0.90);
+    --border: rgba(255, 255, 255, 0.12);
+    --accent: #ec4899;
+    --accent2: #38bdf8;
+    --text: #f8fafc;
+    --muted: #94a3b8;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; user-select: none; }
+  html, body {
+    margin: 0; padding: 0; width: 100%; height: 100%;
+    overflow: hidden; background: var(--bg); color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  #stage {
+    position: fixed; inset: 0; overflow: hidden; background: #05050a;
+    touch-action: pan-y;
+  }
+  #bgBlur {
+    position: absolute; inset: -30px; background-size: cover; background-position: center;
+    filter: blur(28px) brightness(0.45) saturate(1.2);
+    opacity: 0; transition: opacity 0.35s ease;
+    transform: scale(1.1);
+  }
+  .slide-wrap {
+    position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+    will-change: transform, opacity, filter;
+  }
+  .slide-img {
+    width: 100%; height: 100%; object-fit: cover;
+    will-change: transform, opacity, filter;
+    transition: transform 0.12s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .fit-contain .slide-img { object-fit: contain; }
+  .fit-contain #bgBlur { opacity: 1; }
+
+  #beatFlash {
+    position: absolute; inset: 0; pointer-events: none;
+    background: radial-gradient(circle, rgba(236,72,153,0.32) 0%, rgba(56,189,248,0.12) 45%, transparent 75%);
+    opacity: 0; transition: opacity 0.16s ease-out;
+  }
+
+  /* Effects */
+  @keyframes fxZoom { 0% { transform: scale(1.16); opacity: 0.35; } 100% { transform: scale(1); opacity: 1; } }
+  @keyframes fxFlash { 0% { filter: brightness(2.1) contrast(1.2); transform: scale(1.06); } 100% { filter: brightness(1) contrast(1); transform: scale(1); } }
+  @keyframes fxSlide { 0% { transform: translateX(18%) scale(1.04); opacity: 0.25; } 100% { transform: translateX(0) scale(1); opacity: 1; } }
+  @keyframes fxGlitch {
+    0% { transform: translate(-8px, 3px) skewX(6deg) scale(1.05); filter: hue-rotate(90deg) contrast(1.4); }
+    40% { transform: translate(6px, -3px) skewX(-4deg); filter: hue-rotate(-45deg); }
+    100% { transform: translate(0, 0) skewX(0) scale(1); filter: none; }
+  }
+  @keyframes fxFade { 0% { opacity: 0.15; } 100% { opacity: 1; } }
+  .anim-zoom { animation: fxZoom 0.32s cubic-bezier(0.16, 1, 0.3, 1); }
+  .anim-flash { animation: fxFlash 0.28s ease-out; }
+  .anim-slide { animation: fxSlide 0.28s cubic-bezier(0.16, 1, 0.3, 1); }
+  .anim-glitch { animation: fxGlitch 0.24s steps(3); }
+  .anim-fade { animation: fxFade 0.36s ease-out; }
+
+  /* UI Overlays */
+  .ui-chrome { transition: opacity 0.25s ease, transform 0.25s ease; }
+  body.ui-hidden .ui-chrome { opacity: 0; pointer-events: none; }
+  body.ui-hidden #topBar { transform: translateY(-20px); }
+  body.ui-hidden #bottomDock { transform: translateY(24px); }
+
+  #topBar {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 20;
+    padding: calc(env(safe-area-inset-top, 12px) + 10px) 14px 12px;
+    display: flex; align-items: center; justify-content: space-between; gap: 10px;
+    background: linear-gradient(180deg, rgba(9,9,15,0.82) 0%, rgba(9,9,15,0) 100%);
+  }
+  .brand {
+    display: flex; align-items: center; gap: 8px; font-weight: 700; font-size: 15px;
+    background: var(--glass); border: 1px solid var(--border); backdrop-filter: blur(14px);
+    padding: 7px 12px; border-radius: 999px;
+  }
+  .beat-dot {
+    width: 10px; height: 10px; border-radius: 50%; background: var(--muted);
+    transition: transform 0.08s ease, background 0.08s ease, box-shadow 0.08s ease;
+  }
+  .beat-dot.hit {
+    background: var(--accent); transform: scale(1.45);
+    box-shadow: 0 0 14px var(--accent), 0 0 24px var(--accent2);
+  }
+  .top-actions { display: flex; gap: 8px; align-items: center; }
+  .icon-btn {
+    background: var(--glass); border: 1px solid var(--border); color: var(--text);
+    backdrop-filter: blur(14px); border-radius: 999px; padding: 7px 12px;
+    font-size: 13px; cursor: pointer; display: inline-flex; align-items: center; gap: 5px;
+  }
+  .icon-btn:active { transform: scale(0.95); }
+
+  #bottomDock {
+    position: fixed; left: 12px; right: 12px; bottom: calc(env(safe-area-inset-bottom, 12px) + 10px);
+    z-index: 20; background: var(--glass); border: 1px solid var(--border);
+    backdrop-filter: blur(18px); border-radius: 22px; padding: 12px 14px;
+    display: flex; flex-direction: column; gap: 10px;
+    max-width: 560px; margin: 0 auto;
+  }
+  .viz-row { display: flex; align-items: center; gap: 10px; }
+  #vizCanvas {
+    flex: 1; height: 34px; border-radius: 10px; background: rgba(0,0,0,0.35);
+    border: 1px solid rgba(255,255,255,0.06);
+  }
+  .energy-wrap {
+    width: 72px; display: flex; flex-direction: column; gap: 4px; font-size: 11px; color: var(--muted);
+  }
+  .energy-bar-bg {
+    position: relative; height: 8px; border-radius: 99px; background: rgba(255,255,255,0.12); overflow: hidden;
+  }
+  #energyFill {
+    height: 100%; width: 0%; background: linear-gradient(90deg, var(--accent2), var(--accent));
+    transition: width 0.04s linear;
+  }
+  #threshMark {
+    position: absolute; top: 0; bottom: 0; width: 2px; background: #fff; left: 55%;
+  }
+
+  .source-tabs {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px;
+    background: rgba(0,0,0,0.28); padding: 4px; border-radius: 12px;
+  }
+  .tab-btn {
+    border: none; background: transparent; color: var(--muted); font-size: 12px; font-weight: 600;
+    padding: 7px 6px; border-radius: 9px; cursor: pointer;
+  }
+  .tab-btn.active {
+    background: linear-gradient(135deg, rgba(236,72,153,0.9), rgba(139,92,246,0.9));
+    color: #fff;
+  }
+
+  .controls-row {
+    display: flex; align-items: center; justify-content: space-between; gap: 10px; flex-wrap: wrap;
+  }
+  .play-btn {
+    border: none; border-radius: 999px; padding: 9px 18px; font-size: 14px; font-weight: 700;
+    color: #fff; cursor: pointer;
+    background: linear-gradient(135deg, var(--accent), #8b5cf6);
+    box-shadow: 0 4px 16px rgba(236, 72, 153, 0.35);
+  }
+  .play-btn.playing { background: linear-gradient(135deg, #0ea5e9, #6366f1); }
+  .inline-ctrl {
+    flex: 1; min-width: 140px; display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--muted);
+  }
+  .inline-ctrl input[type="range"] { flex: 1; accent-color: var(--accent); }
+  .small-btn {
+    background: rgba(255,255,255,0.1); border: 1px solid var(--border); color: var(--text);
+    border-radius: 10px; padding: 7px 11px; font-size: 12px; cursor: pointer; white-space: nowrap;
+  }
+  .counter-pill {
+    font-size: 12px; color: var(--muted); background: rgba(255,255,255,0.06);
+    padding: 5px 10px; border-radius: 999px;
+  }
+
+  /* Drawers */
+  .drawer {
+    position: fixed; left: 0; right: 0; bottom: 0; z-index: 40;
+    background: var(--glass-strong); border-top: 1px solid var(--border);
+    backdrop-filter: blur(22px); border-radius: 24px 24px 0 0;
+    padding: 16px 16px calc(env(safe-area-inset-bottom, 16px) + 14px);
+    max-height: 76vh; overflow-y: auto;
+    transform: translateY(105%); transition: transform 0.26s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .drawer.open { transform: translateY(0); }
+  .drawer-head {
+    display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;
+  }
+  .drawer-title { font-size: 16px; font-weight: 700; }
+  .setting-item {
+    display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,0.08); font-size: 13px;
+  }
+  .setting-item select, .setting-item input[type="range"] {
+    background: rgba(255,255,255,0.1); color: var(--text); border: 1px solid var(--border);
+    border-radius: 8px; padding: 5px 8px;
+  }
+  .setting-item select option { background: #141424; color: #fff; }
+  .thumb-grid {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 12px;
+  }
+  .thumb-card {
+    position: relative; aspect-ratio: 3/4; border-radius: 12px; overflow: hidden;
+    border: 2px solid transparent; cursor: pointer; background: #111;
+  }
+  .thumb-card.active { border-color: var(--accent); box-shadow: 0 0 12px rgba(236,72,153,0.45); }
+  .thumb-card img { width: 100%; height: 100%; object-fit: cover; display: block; }
+  .thumb-del {
+    position: absolute; top: 5px; right: 5px; width: 22px; height: 22px; border-radius: 50%;
+    border: none; background: rgba(0,0,0,0.72); color: #fff; font-size: 13px; line-height: 22px; cursor: pointer;
+  }
+  .hint-toast {
+    position: fixed; top: 72px; left: 50%; transform: translateX(-50%); z-index: 50;
+    background: rgba(15,15,25,0.9); border: 1px solid var(--border); padding: 8px 14px;
+    border-radius: 999px; font-size: 12px; opacity: 0; pointer-events: none;
+    transition: opacity 0.25s ease;
+  }
+  .hint-toast.show { opacity: 1; }
+  input[type="file"] { display: none; }
+</style>
+</head>
+<body>
+
+<div id="stage">
+  <div id="bgBlur"></div>
+  <div class="slide-wrap" id="slideWrap">
+    <img id="slideImg" class="slide-img" alt="BeatSync Artwork" />
+  </div>
+  <div id="beatFlash"></div>
+</div>
+
+<div id="topBar" class="ui-chrome">
+  <div class="brand">
+    <span id="beatDot" class="beat-dot"></span>
+    <span>节拍画册</span>
+    <span id="imgCounter" class="counter-pill">1 / 6</span>
+  </div>
+  <div class="top-actions">
+    <button class="icon-btn" id="btnGallery">图库</button>
+    <button class="icon-btn" id="btnSettings">设置</button>
+  </div>
+</div>
+
+<div id="bottomDock" class="ui-chrome">
+  <div class="viz-row">
+    <canvas id="vizCanvas" width="320" height="68"></canvas>
+    <div class="energy-wrap">
+      <div style="display:flex;justify-content:space-between;"><span>节拍</span><span id="energyVal">0%</span></div>
+      <div class="energy-bar-bg">
+        <div id="energyFill"></div>
+        <div id="threshMark"></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="source-tabs">
+    <button class="tab-btn active" data-src="synth">内置鼓点</button>
+    <button class="tab-btn" data-src="file">本地音乐</button>
+    <button class="tab-btn" data-src="mic">麦克风</button>
+  </div>
+
+  <div class="controls-row" id="synthPanel">
+    <button class="play-btn" id="btnPlay">▶ 播放</button>
+    <div class="inline-ctrl">
+      <span>BPM</span>
+      <input type="range" id="bpmRange" min="80" max="175" value="124" />
+      <span id="bpmVal" style="width:32px;text-align:right;color:#fff;">124</span>
+    </div>
+    <button class="small-btn" id="btnNext">下一张</button>
+  </div>
+
+  <div class="controls-row" id="filePanel" style="display:none;">
+    <button class="play-btn" id="btnFilePlay">▶ 播放</button>
+    <button class="small-btn" id="btnPickAudio">选音频</button>
+    <div class="inline-ctrl">
+      <input type="range" id="audioSeek" min="0" max="100" value="0" />
+      <span id="audioName" style="max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">未选音频</span>
+    </div>
+  </div>
+
+  <div class="controls-row" id="micPanel" style="display:none;">
+    <button class="play-btn" id="btnMic">🎤 开启收音</button>
+    <div class="inline-ctrl">
+      <span>增益</span>
+      <input type="range" id="micGain" min="0.5" max="3.5" step="0.1" value="1.6" />
+      <span id="micGainVal" style="width:30px;color:#fff;">1.6x</span>
+    </div>
+  </div>
+</div>
+
+<!-- Gallery Drawer -->
+<div class="drawer" id="galleryDrawer">
+  <div class="drawer-head">
+    <div class="drawer-title">图库管理</div>
+    <div style="display:flex;gap:8px;">
+      <button class="small-btn" id="btnAddPhotos">+ 添加图片</button>
+      <button class="small-btn" id="btnResetPhotos">恢复默认</button>
+      <button class="small-btn" data-close="galleryDrawer">关闭</button>
+    </div>
+  </div>
+  <div style="font-size:12px;color:var(--muted);">支持一次多选本地照片，点击缩略图可立即跳转。</div>
+  <div class="thumb-grid" id="thumbGrid"></div>
+</div>
+
+<!-- Settings Drawer -->
+<div class="drawer" id="settingsDrawer">
+  <div class="drawer-head">
+    <div class="drawer-title">节拍与视觉设置</div>
+    <button class="small-btn" data-close="settingsDrawer">关闭</button>
+  </div>
+  <div class="setting-item">
+    <span>触发灵敏度阈值 (<span id="threshText">55%</span>)</span>
+    <input type="range" id="threshRange" min="20" max="90" value="55" />
+  </div>
+  <div class="setting-item">
+    <span>切图冷却时间 (<span id="coolText">260ms</span>)</span>
+    <input type="range" id="coolRange" min="120" max="800" step="20" value="260" />
+  </div>
+  <div class="setting-item">
+    <span>侦测频段</span>
+    <select id="bandSelect">
+      <option value="bass" selected>低音鼓点 (Bass)</option>
+      <option value="full">全频段能量</option>
+    </select>
+  </div>
+  <div class="setting-item">
+    <span>踩点动效</span>
+    <select id="effectSelect">
+      <option value="zoom" selected>缩放冲击</option>
+      <option value="flash">闪白律动</option>
+      <option value="slide">横移切换</option>
+      <option value="glitch">赛博故障</option>
+      <option value="fade">柔和淡入</option>
+    </select>
+  </div>
+  <div class="setting-item">
+    <span>切换顺序</span>
+    <select id="orderSelect">
+      <option value="seq" selected>顺序循环</option>
+      <option value="rand">随机跳跃</option>
+    </select>
+  </div>
+  <div class="setting-item">
+    <span>画面适配</span>
+    <select id="fitSelect">
+      <option value="cover" selected>铺满全屏</option>
+      <option value="contain">完整显示 + 模糊补边</option>
+    </select>
+  </div>
+  <div class="setting-item">
+    <span>低音呼吸律动</span>
+    <input type="checkbox" id="pulseCheck" checked style="width:18px;height:18px;accent-color:var(--accent);" />
+  </div>
+</div>
+
+<div id="toast" class="hint-toast"></div>
+<input type="file" id="photoInput" accept="image/*" multiple />
+<input type="file" id="audioInput" accept="audio/*" />
+<audio id="localAudio" loop crossorigin="anonymous"></audio>
+
+<script>
+(() => {
+  const stage = document.getElementById('stage');
+  const slideImg = document.getElementById('slideImg');
+  const slideWrap = document.getElementById('slideWrap');
+  const bgBlur = document.getElementById('bgBlur');
+  const beatFlash = document.getElementById('beatFlash');
+  const beatDot = document.getElementById('beatDot');
+  const imgCounter = document.getElementById('imgCounter');
+  const vizCanvas = document.getElementById('vizCanvas');
+  const vizCtx = vizCanvas.getContext('2d');
+  const energyFill = document.getElementById('energyFill');
+  const energyVal = document.getElementById('energyVal');
+  const threshMark = document.getElementById('threshMark');
+  const toast = document.getElementById('toast');
+
+  const photoInput = document.getElementById('photoInput');
+  const audioInput = document.getElementById('audioInput');
+  const localAudio = document.getElementById('localAudio');
+
+  let images = [];
+  let currentIdx = 0;
+  let sourceMode = 'synth'; // synth | file | mic
+  let isPlaying = false;
+  let bpm = 124;
+  let threshold = 0.55;
+  let cooldownMs = 260;
+  let bandMode = 'bass';
+  let effectMode = 'zoom';
+  let orderMode = 'seq';
+  let bassPulse = true;
+  let lastBeatTime = 0;
+  let prevEnergy = 0;
+
+  let audioCtx = null;
+  let analyser = null;
+  let freqData = null;
+  let synthTimer = null;
+  let synthStep = 0;
+  let fileSourceNode = null;
+  let micStream = null;
+  let micGainNode = null;
+
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(showToast._t);
+    showToast._t = setTimeout(() => toast.classList.remove('show'), 2200);
+  }
+
+  // Generate 6 offline artworks
+  function generateDefaultArtworks() {
+    const palettes = [
+      ['#09091a', '#ec4899', '#38bdf8', 'NEON CYBER'],
+      ['#1e1b4b', '#f97316', '#f43f5e', 'SUNSET GLOW'],
+      ['#0f172a', '#22c55e', '#eab308', 'POP GEOMETRY'],
+      ['#042f2e', '#2dd4bf', '#818cf8', 'AURORA NIGHT'],
+      ['#18181b', '#e2e8f0', '#a855f7', 'LIQUID CHROME'],
+      ['#271710', '#f59e0b', '#fb7185', 'RETRO WARM'],
+    ];
+    return palettes.map(([c0, c1, c2, label], idx) => {
+      const c = document.createElement('canvas');
+      c.width = 720; c.height = 1280;
+      const g = c.getContext('2d');
+      const grad = g.createLinearGradient(0, 0, c.width, c.height);
+      grad.addColorStop(0, c0); grad.addColorStop(0.55, c1); grad.addColorStop(1, c2);
+      g.fillStyle = grad; g.fillRect(0, 0, c.width, c.height);
+
+      for (let i = 0; i < 6; i++) {
+        const rx = ((idx * 173 + i * 211) % 600) + 60;
+        const ry = ((idx * 257 + i * 317) % 1080) + 100;
+        const rad = 110 + ((i * 53) % 160);
+        const rg = g.createRadialGradient(rx, ry, 10, rx, ry, rad);
+        rg.addColorStop(0, 'rgba(255,255,255,0.28)');
+        rg.addColorStop(1, 'rgba(255,255,255,0)');
+        g.fillStyle = rg;
+        g.beginPath(); g.arc(rx, ry, rad, 0, Math.PI * 2); g.fill();
+      }
+      g.strokeStyle = 'rgba(255,255,255,0.22)';
+      g.lineWidth = 3;
+      g.strokeRect(46, 46, c.width - 92, c.height - 92);
+      g.fillStyle = 'rgba(255,255,255,0.88)';
+      g.font = 'bold 42px sans-serif';
+      g.textAlign = 'center';
+      g.fillText(label, c.width / 2, c.height - 130);
+      return { url: c.toDataURL('image/jpeg', 0.88), default: true };
+    });
+  }
+
+  function initImages() {
+    images = generateDefaultArtworks();
+    currentIdx = 0;
+    renderCurrentImage(false);
+    renderGallery();
+  }
+
+  function renderCurrentImage(withEffect = true) {
+    if (!images.length) return;
+    currentIdx = ((currentIdx % images.length) + images.length) % images.length;
+    const url = images[currentIdx].url;
+    slideImg.src = url;
+    bgBlur.style.backgroundImage = `url("${url}")`;
+    imgCounter.textContent = `${currentIdx + 1} / ${images.length}`;
+
+    if (withEffect) {
+      slideWrap.className = 'slide-wrap';
+      void slideWrap.offsetWidth;
+      slideWrap.classList.add('anim-' + effectMode);
+      beatFlash.style.opacity = '1';
+      setTimeout(() => { beatFlash.style.opacity = '0'; }, 120);
+    }
+    document.querySelectorAll('.thumb-card').forEach((el, i) => {
+      el.classList.toggle('active', i === currentIdx);
+    });
+  }
+
+  function nextImage(step = 1) {
+    if (images.length <= 1) return;
+    if (orderMode === 'rand') {
+      let next = currentIdx;
+      while (next === currentIdx) next = Math.floor(Math.random() * images.length);
+      currentIdx = next;
+    } else {
+      currentIdx = (currentIdx + step + images.length) % images.length;
+    }
+    renderCurrentImage(true);
+  }
+
+  function renderGallery() {
+    const grid = document.getElementById('thumbGrid');
+    grid.innerHTML = '';
+    images.forEach((item, idx) => {
+      const card = document.createElement('div');
+      card.className = 'thumb-card' + (idx === currentIdx ? ' active' : '');
+      const img = document.createElement('img');
+      img.src = item.url;
+      card.appendChild(img);
+      card.addEventListener('click', () => {
+        currentIdx = idx;
+        renderCurrentImage(true);
+      });
+      const del = document.createElement('button');
+      del.className = 'thumb-del';
+      del.textContent = '×';
+      del.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (images.length <= 1) { showToast('至少保留 1 张图片'); return; }
+        images.splice(idx, 1);
+        if (currentIdx >= images.length) currentIdx = 0;
+        renderCurrentImage(false);
+        renderGallery();
+      });
+      card.appendChild(del);
+      grid.appendChild(card);
+    });
+  }
+
+  function ensureAudioContext() {
+    if (!audioCtx) {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      audioCtx = new AC();
+      analyser = audioCtx.createAnalyser();
+      analyser.fftSize = 256;
+      analyser.smoothingTimeConstant = 0.72;
+      freqData = new Uint8Array(analyser.frequencyBinCount);
+    }
+    if (audioCtx.state === 'suspended') audioCtx.resume();
+  }
+
+  function stopAllSources() {
+    isPlaying = false;
+    clearInterval(synthTimer);
+    synthTimer = null;
+    localAudio.pause();
+    if (micStream) {
+      micStream.getTracks().forEach(t => t.stop());
+      micStream = null;
+    }
+    updatePlayButtons();
+  }
+
+  function updatePlayButtons() {
+    const b1 = document.getElementById('btnPlay');
+    b1.textContent = (sourceMode === 'synth' && isPlaying) ? '⏸ 暂停' : '▶ 播放';
+    b1.classList.toggle('playing', sourceMode === 'synth' && isPlaying);
+
+    const b2 = document.getElementById('btnFilePlay');
+    b2.textContent = (sourceMode === 'file' && isPlaying) ? '⏸ 暂停' : '▶ 播放';
+    b2.classList.toggle('playing', sourceMode === 'file' && isPlaying);
+
+    const b3 = document.getElementById('btnMic');
+    b3.textContent = (sourceMode === 'mic' && isPlaying) ? '⏹ 停止收音' : '🎤 开启收音';
+    b3.classList.toggle('playing', sourceMode === 'mic' && isPlaying);
+  }
+
+  // Electronic Drum Synth
+  function triggerDrumStep() {
+    if (!audioCtx || !analyser) return;
+    const now = audioCtx.currentTime;
+    const step = synthStep % 8;
+    synthStep++;
+
+    // Kick on 0, 4 (and syncopated 6 occasionally)
+    if (step === 0 || step === 4) {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(145, now);
+      osc.frequency.exponentialRampToValueAtTime(42, now + 0.14);
+      gain.gain.setValueAtTime(0.95, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.22);
+      osc.connect(gain); gain.connect(analyser); analyser.connect(audioCtx.destination);
+      osc.start(now); osc.stop(now + 0.24);
+    }
+    // Hi-hat on odd steps
+    if (step % 2 === 1) {
+      const buf = audioCtx.createBuffer(1, audioCtx.sampleRate * 0.05, audioCtx.sampleRate);
+      const data = buf.getChannelData(0);
+      for (let i = 0; i < data.length; i++) data[i] = (Math.random() * 2 - 1) * Math.exp(-i / 450);
+      const noise = audioCtx.createBufferSource();
+      noise.buffer = buf;
+      const filter = audioCtx.createBiquadFilter();
+      filter.type = 'highpass'; filter.frequency.value = 6500;
+      const gain = audioCtx.createGain();
+      gain.gain.setValueAtTime(0.28, now);
+      noise.connect(filter); filter.connect(gain); gain.connect(analyser); analyser.connect(audioCtx.destination);
+      noise.start(now);
+    }
+    // Bass stab on 2, 6
+    if (step === 2 || step === 6) {
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'triangle';
+      osc.frequency.setValueAtTime(step === 2 ? 110 : 98, now);
+      gain.gain.setValueAtTime(0.32, now);
+      gain.gain.exponentialRampToValueAtTime(0.001, now + 0.14);
+      osc.connect(gain); gain.connect(analyser); analyser.connect(audioCtx.destination);
+      osc.start(now); osc.stop(now + 0.16);
+    }
+  }
+
+  function startSynth() {
+    ensureAudioContext();
+    clearInterval(synthTimer);
+    synthStep = 0;
+    isPlaying = true;
+    const intervalMs = (60 / bpm / 2) * 1000;
+    triggerDrumStep();
+    synthTimer = setInterval(triggerDrumStep, intervalMs);
+    updatePlayButtons();
+  }
+
+  // Analysis loop
+  function tick() {
+    requestAnimationFrame(tick);
+    vizCtx.clearRect(0, 0, vizCanvas.width, vizCanvas.height);
+
+    if (!analyser || !freqData || !isPlaying) {
+      energyFill.style.width = '0%';
+      energyVal.textContent = '0%';
+      slideImg.style.transform = 'scale(1)';
+      return;
+    }
+
+    analyser.getByteFrequencyData(freqData);
+
+    // Draw spectrum
+    const bars = 28;
+    const step = Math.floor(freqData.length / bars);
+    const bw = vizCanvas.width / bars;
+    for (let i = 0; i < bars; i++) {
+      const v = freqData[i * step] / 255;
+      const h = Math.max(3, v * (vizCanvas.height - 6));
+      vizCtx.fillStyle = i < 7 ? '#ec4899' : '#38bdf8';
+      vizCtx.fillRect(i * bw + 2, vizCanvas.height - h, bw - 4, h);
+    }
+
+    // Compute beat energy
+    const endBin = bandMode === 'bass' ? 10 : freqData.length;
+    let sum = 0;
+    for (let i = 0; i < endBin; i++) sum += freqData[i];
+    const energy = Math.min(1, (sum / (endBin * 255)) * 1.35);
+
+    energyFill.style.width = Math.round(energy * 100) + '%';
+    energyVal.textContent = Math.round(energy * 100) + '%';
+
+    if (bassPulse) {
+      const scale = 1 + energy * 0.065;
+      slideImg.style.transform = `scale(${scale.toFixed(3)})`;
+    } else {
+      slideImg.style.transform = 'scale(1)';
+    }
+
+    const now = performance.now();
+    const rising = energy > prevEnergy + 0.04;
+    if (energy >= threshold && rising && (now - lastBeatTime) >= cooldownMs) {
+      lastBeatTime = now;
+      beatDot.classList.add('hit');
+      setTimeout(() => beatDot.classList.remove('hit'), 110);
+      nextImage(1);
+    }
+    prevEnergy = energy * 0.7 + prevEnergy * 0.3;
+  }
+
+  // Source tabs
+  document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      stopAllSources();
+      sourceMode = btn.dataset.src;
+      document.querySelectorAll('.tab-btn').forEach(b => b.classList.toggle('active', b === btn));
+      document.getElementById('synthPanel').style.display = sourceMode === 'synth' ? 'flex' : 'none';
+      document.getElementById('filePanel').style.display = sourceMode === 'file' ? 'flex' : 'none';
+      document.getElementById('micPanel').style.display = sourceMode === 'mic' ? 'flex' : 'none';
+    });
+  });
+
+  // Synth controls
+  document.getElementById('btnPlay').addEventListener('click', () => {
+    if (isPlaying) stopAllSources(); else startSynth();
+  });
+  document.getElementById('bpmRange').addEventListener('input', (e) => {
+    bpm = Number(e.target.value);
+    document.getElementById('bpmVal').textContent = bpm;
+    if (sourceMode === 'synth' && isPlaying) startSynth();
+  });
+  document.getElementById('btnNext').addEventListener('click', () => nextImage(1));
+
+  // Local audio controls
+  document.getElementById('btnPickAudio').addEventListener('click', () => audioInput.click());
+  audioInput.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    localAudio.src = URL.createObjectURL(file);
+    document.getElementById('audioName').textContent = file.name;
+    ensureAudioContext();
+    if (!fileSourceNode) {
+      fileSourceNode = audioCtx.createMediaElementSource(localAudio);
+      fileSourceNode.connect(analyser);
+      analyser.connect(audioCtx.destination);
+    }
+    localAudio.play().then(() => {
+      isPlaying = true;
+      updatePlayButtons();
+    }).catch(() => showToast('请点击播放按钮开始'));
+  });
+
+  document.getElementById('btnFilePlay').addEventListener('click', () => {
+    if (!localAudio.src) { audioInput.click(); return; }
+    ensureAudioContext();
+    if (!fileSourceNode) {
+      fileSourceNode = audioCtx.createMediaElementSource(localAudio);
+      fileSourceNode.connect(analyser);
+      analyser.connect(audioCtx.destination);
+    }
+    if (localAudio.paused) {
+      localAudio.play(); isPlaying = true;
+    } else {
+      localAudio.pause(); isPlaying = false;
+    }
+    updatePlayButtons();
+  });
+
+  const audioSeek = document.getElementById('audioSeek');
+  localAudio.addEventListener('timeupdate', () => {
+    if (localAudio.duration) audioSeek.value = (localAudio.currentTime / localAudio.duration) * 100;
+  });
+  audioSeek.addEventListener('input', () => {
+    if (localAudio.duration) localAudio.currentTime = (audioSeek.value / 100) * localAudio.duration;
+  });
+
+  // Mic controls
+  document.getElementById('btnMic').addEventListener('click', async () => {
+    if (isPlaying && sourceMode === 'mic') { stopAllSources(); return; }
+    try {
+      ensureAudioContext();
+      micStream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const micSource = audioCtx.createMediaStreamSource(micStream);
+      micGainNode = audioCtx.createGain();
+      micGainNode.gain.value = Number(document.getElementById('micGain').value);
+      // Connect to analyser ONLY (not destination) to prevent acoustic feedback!
+      micSource.connect(micGainNode);
+      micGainNode.connect(analyser);
+      isPlaying = true;
+      updatePlayButtons();
+      showToast('麦克风收音已开启');
+    } catch (err) {
+      showToast('无法获取麦克风权限，请检查授权');
+    }
+  });
+  document.getElementById('micGain').addEventListener('input', (e) => {
+    const v = Number(e.target.value);
+    document.getElementById('micGainVal').textContent = v.toFixed(1) + 'x';
+    if (micGainNode) micGainNode.gain.value = v;
+  });
+
+  // Photos
+  document.getElementById('btnAddPhotos').addEventListener('click', () => photoInput.click());
+  photoInput.addEventListener('change', (e) => {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    files.forEach(f => images.push({ url: URL.createObjectURL(f), default: false }));
+    currentIdx = images.length - files.length;
+    renderCurrentImage(true);
+    renderGallery();
+    showToast(`已添加 ${files.length} 张图片`);
+    photoInput.value = '';
+  });
+  document.getElementById('btnResetPhotos').addEventListener('click', () => {
+    initImages();
+    showToast('已恢复默认图库');
+  });
+
+  // Drawers
+  function openDrawer(id) {
+    document.querySelectorAll('.drawer').forEach(d => d.classList.remove('open'));
+    document.getElementById(id).classList.add('open');
+  }
+  document.getElementById('btnGallery').addEventListener('click', () => openDrawer('galleryDrawer'));
+  document.getElementById('btnSettings').addEventListener('click', () => openDrawer('settingsDrawer'));
+  document.querySelectorAll('[data-close]').forEach(btn => {
+    btn.addEventListener('click', () => document.getElementById(btn.dataset.close).classList.remove('open'));
+  });
+
+  // Settings
+  document.getElementById('threshRange').addEventListener('input', (e) => {
+    threshold = Number(e.target.value) / 100;
+    document.getElementById('threshText').textContent = e.target.value + '%';
+    threshMark.style.left = e.target.value + '%';
+  });
+  document.getElementById('coolRange').addEventListener('input', (e) => {
+    cooldownMs = Number(e.target.value);
+    document.getElementById('coolText').textContent = cooldownMs + 'ms';
+  });
+  document.getElementById('bandSelect').addEventListener('change', (e) => { bandMode = e.target.value; });
+  document.getElementById('effectSelect').addEventListener('change', (e) => { effectMode = e.target.value; });
+  document.getElementById('orderSelect').addEventListener('change', (e) => { orderMode = e.target.value; });
+  document.getElementById('fitSelect').addEventListener('change', (e) => {
+    stage.classList.toggle('fit-contain', e.target.value === 'contain');
+  });
+  document.getElementById('pulseCheck').addEventListener('change', (e) => { bassPulse = e.target.checked; });
+
+  // Tap to hide UI & swipe left/right to switch photos
+  let touchStartX = 0, touchStartY = 0;
+  stage.addEventListener('touchstart', (e) => {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  }, { passive: true });
+  stage.addEventListener('touchend', (e) => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    if (Math.abs(dx) > 48 && Math.abs(dx) > Math.abs(dy)) {
+      nextImage(dx < 0 ? 1 : -1);
+    }
+  });
+  stage.addEventListener('click', () => {
+    const anyOpen = Array.from(document.querySelectorAll('.drawer')).some(d => d.classList.contains('open'));
+    if (anyOpen) {
+      document.querySelectorAll('.drawer').forEach(d => d.classList.remove('open'));
+      return;
+    }
+    document.body.classList.toggle('ui-hidden');
+  });
+
+  initImages();
+  tick();
+})();
+</script>
+</body>
+</html>

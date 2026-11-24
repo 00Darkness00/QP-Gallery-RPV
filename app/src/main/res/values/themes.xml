@@ -1,0 +1,7 @@
+<resources>
+    <style name="Theme.BeatSyncGallery" parent="Theme.AppCompat.NoActionBar">
+        <item name="android:windowBackground">#09090F</item>
+        <item name="android:statusBarColor">#09090F</item>
+        <item name="android:navigationBarColor">#09090F</item>
+    </style>
+</resources>
